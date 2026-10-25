@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProductDataType {
+  MANUFACTURER
+  INDEPENDENT_SOURCE
+  HANDS_ON_TEST
+  FICTIONAL_DEMO
+}
+
+enum ReviewType {
+  EDITORIAL
+  CUSTOMER
+  AGGREGATED
+  LAB_TEST
+}
+
+enum AlertStatus {
+  ACTIVE
+  TRIGGERED
+  PAUSED
+  CANCELLED
+}
+
+model Category {
+  id            String     @id @default(cuid())
+  name          String
+  slug          String     @unique
+  description   String?
+  icon          String?
+  featuredSpecs Json?
+  parentId      String?
+  parent        Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children      Category[] @relation("CategoryTree")
+  products      Product[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([parentId])
+}
+
+model Product {
+  id                String            @id @default(cuid())
+  slug              String            @unique
+  name              String
+  brand             String
+  model             String?
+  summary           String?
+  description       String?
+  categoryId        String
+  category          Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  priceMinorUnits   Int               @default(0)
+  currency          String            @default("EUR")
+  releaseYear       Int?
+  specifications    Json
+  structuredSpecs   Json?
+  pros              Json?
+  cons              Json?
+  useCases          String[]
+  keywords          String[]
+  editorialAward    String?
+  editorialVerdict  Json?
+  aiReviewSummary   Json?
+  dataType          ProductDataType   @default(MANUFACTURER)
+  popularityScore   Float?
+  overallScore      Float?
+  valueScore        Float?
+  performanceScore  Float?
+  longevityScore    Float?
+  ergonomicsScore   Float?
+  releaseDate       DateTime?
+  reviews           Review[]
+  benchmarks        LabBenchmark[]
+  prices            PriceOffer[]
+  priceHistory      PriceSnapshot[]
+  wishlistItems     WishlistItem[]
+  priceAlerts       PriceAlert[]
+  affiliateClicks   AffiliateClick[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([categoryId, brand])
+  @@index([categoryId, priceMinorUnits])
+  @@index([categoryId, overallScore])
+  @@index([name])
+}
+
+model LabBenchmark {
+  id               String   @id @default(cuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  metricName       String
+  metricGroup      String
+  numericValue     Float
+  unit             String
+  higherIsBetter   Boolean  @default(true)
+  percentileRank   Float?
+  methodologyVer   String   @default("v2.4")
+  testedAt         DateTime @default(now())
+
+  @@index([productId, metricGroup])
+}
+
+model Review {
+  id          String     @id @default(cuid())
+  productId   String
+  product     Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type        ReviewType
+  source      String
+  sourceUrl   String?
+  author      String?
+  title       String?
+  content     String
+  rating      Float?
+  publishedAt DateTime?
+  collectedAt DateTime   @default(now())
+  isVerified  Boolean    @default(false)
+
+  @@index([productId, type])
+}
+
+model PriceOffer {
+  id                  String   @id @default(cuid())
+  productId           String
+  product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  retailer            String
+  retailerCountry     String
+  priceMinorUnits     Int
+  originalMinorUnits  Int?
+  currency            String   @default("EUR")
+  productUrl          String
+  shippingNote        String?
+  deliveryDays        String?
+  trustScore          Int      @default(95)
+  checkedAt           DateTime
+  inStock             Boolean?
+  isAffiliate         Boolean  @default(false)
+  disclosureText      String?
+  createdAt           DateTime @default(now())
+
+  @@index([productId, retailerCountry, checkedAt])
+  @@index([productId, priceMinorUnits])
+}
+
+model PriceSnapshot {
+  id              String   @id @default(cuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  retailer        String
+  priceMinorUnits Int
+  currency        String   @default("EUR")
+  capturedAt      DateTime @default(now())
+
+  @@index([productId, capturedAt])
+}
+
+model User {
+  id             String         @id @default(cuid())
+  authProviderId String?        @unique
+  email          String?        @unique
+  displayName    String?
+  wishlistItems  WishlistItem[]
+  priceAlerts    PriceAlert[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model PriceAlert {
+  id              String      @id @default(cuid())
+  userId          String?
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email           String
+  productId       String
+  product         Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  targetMinorUnit Int
+  currency        String      @default("EUR")
+  status          AlertStatus @default(ACTIVE)
+  createdAt       DateTime    @default(now())
+  triggeredAt     DateTime?
+
+  @@index([productId, status, targetMinorUnit])
+  @@index([email])
+}
+
+model AffiliateClick {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  retailer      String
+  placement     String   // e.g. "product_detail", "comparison_matrix", "advisor_shortlist"
+  priceMinor    Int
+  sessionHash   String?
+  clickedAt     DateTime @default(now())
+
+  @@index([productId, clickedAt])
+  @@index([retailer, clickedAt])
+}
+
+model Comparison {
+  id             String    @id @default(cuid())
+  shareToken     String    @unique @default(cuid())
+  title          String?
+  productSlugs   String[]
+  criteriaConfig Json?
+  viewCount      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime?
+}
